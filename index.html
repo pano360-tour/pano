@@ -35,6 +35,8 @@ canvas#ov{position:absolute;inset:0;width:100%;height:100%}
 .hint{font-size:.88rem;color:var(--muted)}
 #stList{display:flex;flex-direction:column;gap:12px;max-width:380px;margin-top:8px}
 #stList a{text-decoration:none}
+#errBox{position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:99;background:#b5543c;color:#fff;
+  padding:12px 14px;border-radius:12px;font-size:.85rem;line-height:1.7;direction:ltr;text-align:left;white-space:pre-wrap;max-height:40vh;overflow:auto}
 #doneList{margin:18px 0;display:flex;flex-direction:column;gap:12px;align-items:stretch;max-width:380px}
 </style>
 </head>
@@ -99,10 +101,14 @@ canvas#ov{position:absolute;inset:0;width:100%;height:100%}
   </div>
 </section>
 
+<div id="errBox" hidden></div>
 <script>
 const $ = s => document.querySelector(s);
 const fa = n => Number(n).toLocaleString('fa-IR');
 const D = Math.PI / 180;
+function showErr(msg){ const b = $('#errBox'); b.hidden = false; b.textContent = 'خطا: ' + msg + '\n(از این پیام اسکرین‌شات بگیرید)'; b.onclick = () => b.hidden = true; }
+window.addEventListener('error', e => showErr((e.message || e.error) + ' @' + (e.lineno || '')));
+window.addEventListener('unhandledrejection', e => showErr(e.reason && (e.reason.message || e.reason)));
 
 /* ---------- targets: rows of points around you ---------- */
 const ROWS = [ {p:0,n:14}, {p:42,n:10}, {p:-42,n:10}, {p:76,n:4}, {p:-76,n:4}, {p:90,n:1}, {p:-90,n:1} ];
@@ -287,8 +293,11 @@ async function stitch(OW, OH, long, L, cache, progress){
   const sinY = new Float32Array(OW), cosY = new Float32Array(OW), sinE = new Float32Array(OH), cosE = new Float32Array(OH);
   for (let i = 0; i < OW; i++) { const y = ((i + .5) / OW * 360 - 180) * D; sinY[i] = Math.sin(y); cosY[i] = Math.cos(y); }
   for (let j = 0; j < OH; j++) { const e = (90 - (j + .5) / OH * 180) * D; sinE[j] = Math.sin(e); cosE[j] = Math.cos(e); }
+  if (progress) progress(0, shots.length);
+  await tick();
   for (let k = 0; k < shots.length; k++) {
     const sh = shots[k];
+    if (!sh.f) throw new Error('عکس ' + (k+1) + ' اطلاعات جهت ندارد');
     const P = cache ? (cache[k] = cache[k] || await loadPix(sh.blob, long)) : await loadPix(sh.blob, long);
     const { w, h, d } = P, hw = w / 2, hh = h / 2;
     const fp = (Math.max(w, h) / 2) / Math.tan(L * D / 2);
@@ -409,7 +418,10 @@ async function preview(){
   const run = ++pvRun, L = +$('#fov').value;
   $('#fovVal').textContent = fa(L) + '°';
   $('#stTxt').textContent = 'در حال ساختن پیش‌نمایش…';
-  const img = await stitch(1024, 512, 360, L, pvCache, (a, b) => { if (run === pvRun) $('#stTxt').textContent = `پیش‌نمایش: ${fa(a)} از ${fa(b)}`; });
+  let img;
+  try {
+    img = await stitch(1024, 512, 300, L, pvCache, (a, b) => { if (run === pvRun) $('#stTxt').textContent = `پیش‌نمایش: ${fa(a)} از ${fa(b)}`; });
+  } catch(e) { $('#stTxt').textContent = 'پیش‌نمایش ساخته نشد.'; showErr(e.message || e); return; }
   if (run !== pvRun) return;
   const c = $('#pv'); c.width = 1024; c.height = 512; c.getContext('2d').putImageData(img, 0, 0);
   $('#stTxt').textContent = 'پیش‌نمایش آماده است. اگر یکدست است، «ساختن با کیفیت کامل» را بزنید.';
@@ -425,7 +437,7 @@ $('#finalBtn').onclick = async () => {
   const btn = $('#finalBtn'); btn.disabled = true;
   try {
     const L = +$('#fov').value;
-    const img = await stitch(3072, 1536, 1280, L, null, (a, b) => $('#stTxt').textContent = `ساختن عکس نهایی: ${fa(a)} از ${fa(b)}…`);
+    const img = await stitch(2560, 1280, 1100, L, null, (a, b) => $('#stTxt').textContent = `ساختن عکس نهایی: ${fa(a)} از ${fa(b)}…`);
     const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; c.getContext('2d').putImageData(img, 0, 0);
     const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.9));
     if (!blob) throw new Error('حافظه کافی نبود');
@@ -437,6 +449,7 @@ $('#finalBtn').onclick = async () => {
     $('#resShare').hidden = !(navigator.canShare && navigator.canShare({ files: [resultFile] }));
     $('#stTxt').textContent = 'عکس ۳۶۰ آماده است. آن را ذخیره کنید یا بفرستید و در برنامهٔ تور اضافه کنید.';
   } catch(e) {
+    showErr(e.message || e);
     $('#stTxt').textContent = 'ساختن نشد: ' + (e.message || e) + ' — اگر حافظهٔ گوشی پر است، برنامه‌های دیگر را ببندید و دوباره امتحان کنید.';
   } finally { btn.disabled = false; }
 };
@@ -469,15 +482,18 @@ $('#manualBtn').onclick = () => {
   capture(bd > Math.cos(12*D) ? best : null);
 };
 $('#finishBtn').onclick = finish;
+function stopCam(){ if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; vid.srcObject = null; } }
+async function backToCam(){ try { if (!stream) await startCam(); show('cam'); } catch(e) { showErr(e.message || e); } }
 function finish(){
+  stopCam();
   const left = targets.filter(t => !t.done).length;
   $('#doneTxt').textContent = `${fa(shots.length)} عکس گرفته شد.` + (left ? ` ${fa(left)} نقطه باقی مانده؛ اگر بخواهید برگردید و کاملش کنید.` : ' همهٔ نقطه‌ها کامل شد.');
   show('done');
 }
-$('#moreBtn').onclick = () => show('cam');
+$('#moreBtn').onclick = backToCam;
 $('#resetBtn').onclick = () => {
   if (shots.length && !confirm('همهٔ عکس‌های این اتاق پاک شوند؟')) return;
-  shots = []; makeTargets(); yaw0 = null; updateCount(); show('cam');
+  shots = []; makeTargets(); yaw0 = null; updateCount(); pvCache = []; backToCam();
 };
 
 function files(){
