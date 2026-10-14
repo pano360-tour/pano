@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>عکاسی ۳۶۰</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root{--ink:#16222a;--glass:rgba(22,34,42,.78);--plaster:#e9e6df;--muted:#9fb0b8;--brass:#c9a227;--brick:#b5543c;--ok:#5fb37a}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:#000;color:var(--plaster);font-family:Tahoma,"Segoe UI",sans-serif;overflow:hidden;
+  -webkit-user-select:none;user-select:none}
+button{font:inherit;color:inherit;border:0;cursor:pointer}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:14px 26px;border-radius:999px;background:var(--brass);color:var(--ink);font-weight:700;font-size:1.05rem}
+.btn.ghost{background:var(--glass);color:var(--plaster);border:1px solid rgba(255,255,255,.2)}
+.screen{position:fixed;inset:0;display:none}
+.screen.on{display:block}
+#intro,#done{background:var(--ink);padding:calc(28px + env(safe-area-inset-top)) 24px 24px;overflow:auto}
+h1{font-size:1.9rem;margin:0 0 10px}
+p,li{line-height:1.95;color:#d2d6d6}
+ol{padding-right:20px;margin:0 0 24px}
+.warn{color:#f0c27a}
+video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+canvas#ov{position:absolute;inset:0;width:100%;height:100%}
+#hud{position:absolute;top:calc(10px + env(safe-area-inset-top));left:10px;right:10px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.pill{background:var(--glass);padding:8px 14px;border-radius:999px;font-size:.95rem;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+#tip{position:absolute;top:calc(60px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);width:min(92vw,420px);text-align:center}
+#bar{position:absolute;bottom:calc(16px + env(safe-area-inset-bottom));left:0;right:0;display:flex;justify-content:center;gap:10px;flex-wrap:wrap;padding:0 10px}
+#flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .25s}
+#stitch{background:var(--ink);padding:calc(20px + env(safe-area-inset-top)) 16px 24px;overflow:auto}
+#pv{width:100%;aspect-ratio:2/1;background:#0d161b;border-radius:12px;display:block}
+.fovRow{display:block;margin:6px 0 2px}
+.fovRow input{width:100%;margin-top:10px;accent-color:#c9a227}
+.hint{font-size:.88rem;color:var(--muted)}
+#stList{display:flex;flex-direction:column;gap:12px;max-width:380px;margin-top:8px}
+#stList a{text-decoration:none}
+#doneList{margin:18px 0;display:flex;flex-direction:column;gap:12px;align-items:stretch;max-width:380px}
+</style>
+</head>
+<body>
+
+<section id="intro" class="screen on">
+  <h1>عکاسی ۳۶۰</h1>
+  <p>این صفحه مثل اپ‌های ۳۶۰ نقطه‌هایی دور تا دورتان نشان می‌دهد. هر بار دایرهٔ وسط صفحه را روی یک نقطه نگه دارید، خودش عکس می‌گیرد.</p>
+  <ol>
+    <li>وسط اتاق بایستید و چراغ‌ها را روشن کنید.</li>
+    <li>گوشی را <b>عمودی</b> بگیرید.</li>
+    <li><b>دور خود گوشی بچرخید، نه دور خودتان.</b> پاها سر جایش بماند و گوشی تقریباً در یک نقطهٔ هوا بچرخد.</li>
+    <li>آرام حرکت کنید. روی هر نقطه یک لحظه مکث کنید تا دایره پر شود.</li>
+    <li>آخر کار «ارسال» را بزنید و عکس‌ها را برای ساختن ۳۶۰ بفرستید.</li>
+  </ol>
+  <p id="httpsWarn" class="warn" hidden>این صفحه باید از یک آدرس https باز شود (مثلاً GitHub Pages)، وگرنه آیفون اجازهٔ دوربین و سنسور را نمی‌دهد.</p>
+  <button id="startBtn" class="btn">شروع</button>
+  <p id="err" class="warn"></p>
+</section>
+
+<section id="cam" class="screen">
+  <video id="vid" playsinline muted autoplay></video>
+  <canvas id="ov"></canvas>
+  <div id="flash"></div>
+  <div id="hud">
+    <span id="count" class="pill">۰ از ۰</span>
+    <span id="dir" class="pill"></span>
+  </div>
+  <div id="tip" class="pill">گوشی را بچرخانید تا دایرهٔ وسط روی نقطهٔ طلایی بیفتد</div>
+  <div id="bar">
+    <button id="manualBtn" class="btn ghost">عکس دستی</button>
+    <button id="finishBtn" class="btn">پایان</button>
+  </div>
+</section>
+
+<section id="done" class="screen">
+  <h1>تمام شد</h1>
+  <p id="doneTxt"></p>
+  <div id="doneList">
+    <button id="stitchBtn" class="btn">ساختن ۳۶۰ روی همین گوشی</button>
+    <button id="shareBtn" class="btn ghost">ارسال عکس‌های خام (تلگرام، Files و…)</button>
+    <button id="zipBtn" class="btn ghost">دانلود عکس‌های خام به‌صورت ZIP</button>
+    <button id="moreBtn" class="btn ghost">برگشت و گرفتن عکس‌های باقی‌مانده</button>
+    <button id="resetBtn" class="btn ghost">اتاق جدید (پاک کردن همه)</button>
+  </div>
+  <p class="warn" style="font-size:.9rem">تا وقتی عکس‌ها را نفرستاده‌اید این صفحه را نبندید؛ عکس‌ها فقط در همین صفحه نگه داشته می‌شوند.</p>
+</section>
+
+<section id="stitch" class="screen">
+  <h1>ساختن ۳۶۰</h1>
+  <canvas id="pv"></canvas>
+  <p id="stTxt">در حال ساختن پیش‌نمایش…</p>
+  <label class="fovRow">زاویهٔ دید دوربین: <b id="fovVal"></b>
+    <input id="fov" type="range" min="40" max="80" step="0.5" value="58">
+  </label>
+  <p class="hint">اگر لبهٔ اشیا دوتا دیده می‌شود یا تکه‌ها روی هم نمی‌نشینند، این نوار را کمی جابه‌جا کنید تا تصویر یکدست شود.</p>
+  <div id="stList">
+    <button id="finalBtn" class="btn">ساختن با کیفیت کامل</button>
+    <button id="resShare" class="btn" hidden>ذخیره یا ارسال عکس ۳۶۰</button>
+    <a id="resLink" class="btn ghost" hidden download>دانلود عکس ۳۶۰</a>
+    <button id="stBack" class="btn ghost">برگشت</button>
+  </div>
+</section>
+
+<script>
+const $ = s => document.querySelector(s);
+const fa = n => Number(n).toLocaleString('fa-IR');
+const D = Math.PI / 180;
+
+/* ---------- targets: rows of points around you ---------- */
+const ROWS = [ {p:0,n:14}, {p:42,n:10}, {p:-42,n:10}, {p:76,n:4}, {p:-76,n:4}, {p:90,n:1}, {p:-90,n:1} ];
+let targets = [];
+function makeTargets(){
+  targets = [];
+  ROWS.forEach((r, ri) => {
+    for (let i = 0; i < r.n; i++)
+      targets.push({ yaw: (i * 360 / r.n + (ri % 2 ? 180 / r.n : 0)) % 360, pitch: r.p, done: false });
+  });
+}
+const vec = (yaw, pitch) => [Math.cos(pitch*D)*Math.sin(yaw*D), Math.cos(pitch*D)*Math.cos(yaw*D), Math.sin(pitch*D)];
+const dot = (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+const cross = (a, b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+const norm = a => { const l = Math.hypot(...a) || 1; return a.map(x => x / l); };
+
+/* ---------- orientation ---------- */
+let R = null, yaw0 = null;
+function rotMat(a, b, g){
+  a*=D; b*=D; g*=D;
+  const ca=Math.cos(a), sa=Math.sin(a), cb=Math.cos(b), sb=Math.sin(b), cg=Math.cos(g), sg=Math.sin(g);
+  return [
+    [ca*cg - sa*sb*sg, -sa*cb, ca*sg + sa*sb*cg],
+    [sa*cg + ca*sb*sg,  ca*cb, sa*sg - ca*sb*cg],
+    [-cb*sg,            sb,    cb*cg]
+  ];
+}
+window.addEventListener('deviceorientation', e => {
+  if (e.alpha == null) return;
+  R = rotMat(e.alpha, e.beta, e.gamma);
+});
+const camDir = () => [-R[0][2], -R[1][2], -R[2][2]];       // rear camera looks along device -z
+const camUp  = () => [ R[0][1],  R[1][1],  R[2][1]];       // device +y (top of the phone)
+function camPose(){
+  const d = camDir(), u = camUp();
+  let yaw = Math.atan2(d[0], d[1]) / D, pitch = Math.asin(Math.max(-1, Math.min(1, d[2]))) / D;
+  const z = [0,0,1];
+  let upI = z.map((v, i) => v - dot(z, d) * d[i]);
+  let roll = 0;
+  if (Math.hypot(...upI) > 1e-3) {
+    upI = norm(upI); const rightI = cross(d, upI);
+    roll = Math.atan2(dot(u, rightI), dot(u, upI)) / D;
+  }
+  return { yaw, pitch, roll, d };
+}
+// target direction in the world, relative to where you started
+const tDir = t => vec((t.yaw + yaw0) % 360, t.pitch);
+
+/* ---------- camera ---------- */
+let stream = null;
+const vid = $('#vid'), ov = $('#ov'), ctx = ov.getContext('2d');
+async function startCam(){
+  stream = await navigator.mediaDevices.getUserMedia({
+    audio: false,
+    video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } }
+  });
+  vid.srcObject = stream; await vid.play();
+}
+
+/* ---------- shots ---------- */
+let shots = [];      // {blob, yaw, pitch, roll, target}
+let hold = 0, lastD = null, lastT = 0, busy = false;
+const HFOV_GUESS = 40;   // only used to draw the dots on screen
+
+async function capture(targetIndex){
+  if (busy || !vid.videoWidth) return;
+  busy = true;
+  const pose = camPose();
+  const c = document.createElement('canvas');
+  c.width = vid.videoWidth; c.height = vid.videoHeight;
+  c.getContext('2d').drawImage(vid, 0, 0);
+  const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+  const rz = v => { const c = Math.cos(yaw0*D), sn = Math.sin(yaw0*D); return [v[0]*c - v[1]*sn, v[0]*sn + v[1]*c, v[2]]; };
+  const basis = { f: rz(camDir()), u: rz(camUp()), r: rz([R[0][0], R[1][0], R[2][0]]) };
+  shots.push({ blob, yaw: ((pose.yaw - yaw0) % 360 + 360) % 360, pitch: pose.pitch, roll: pose.roll, target: targetIndex, ...basis });
+  if (targetIndex != null) targets[targetIndex].done = true;
+  $('#flash').style.opacity = .7; setTimeout(() => $('#flash').style.opacity = 0, 120);
+  if (navigator.vibrate) navigator.vibrate(40);
+  hold = 0; busy = false;
+  updateCount();
+  if (targets.every(t => t.done)) finish();
+}
+function updateCount(){
+  const n = targets.filter(t => t.done).length;
+  $('#count').textContent = `${fa(n)} از ${fa(targets.length)}`;
+}
+
+/* ---------- drawing loop ---------- */
+function loop(t){
+  requestAnimationFrame(loop);
+  if (!$('#cam').classList.contains('on')) return;
+  const W = ov.width = ov.clientWidth * devicePixelRatio, H = ov.height = ov.clientHeight * devicePixelRatio;
+  ctx.clearRect(0, 0, W, H);
+  if (!R) { $('#tip').textContent = 'سنسور حرکت در دسترس نیست…'; return; }
+  const pose = camPose();
+  if (yaw0 == null) yaw0 = (pose.yaw + 360) % 360;
+  const f = (W / 2) / Math.tan(HFOV_GUESS * D / 2), cx = W / 2, cy = H / 2;
+
+  // nearest unfinished target
+  let best = -1, bestDot = -2;
+  targets.forEach((tg, i) => { if (!tg.done) { const dd = dot(pose.d, tDir(tg)); if (dd > bestDot) { bestDot = dd; best = i; } } });
+  const ang = best < 0 ? 180 : Math.acos(Math.min(1, bestDot)) / D;
+
+  // steadiness
+  const now = t || performance.now();
+  let speed = 0;
+  if (lastD) speed = Math.acos(Math.min(1, dot(lastD, pose.d))) / D / Math.max(1, now - lastT) * 1000;
+  lastD = pose.d; lastT = now;
+
+  // draw targets
+  targets.forEach((tg, i) => {
+    const w = tDir(tg);
+    const v = [ dot([R[0][0],R[1][0],R[2][0]], w), dot([R[0][1],R[1][1],R[2][1]], w), dot([R[0][2],R[1][2],R[2][2]], w) ];
+    const fwd = -v[2]; if (fwd < 0.15) return;
+    const x = cx + f * v[0] / fwd, y = cy - f * v[1] / fwd;
+    ctx.beginPath();
+    if (tg.done) { ctx.arc(x, y, 9*devicePixelRatio, 0, 7); ctx.fillStyle = 'rgba(95,179,122,.85)'; ctx.fill(); }
+    else if (i === best) {
+      ctx.arc(x, y, (18 + 3*Math.sin(now/180))*devicePixelRatio, 0, 7);
+      ctx.fillStyle = '#c9a227'; ctx.fill(); ctx.lineWidth = 3*devicePixelRatio; ctx.strokeStyle = '#fff'; ctx.stroke();
+    } else { ctx.arc(x, y, 10*devicePixelRatio, 0, 7); ctx.lineWidth = 3*devicePixelRatio; ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.stroke(); }
+  });
+
+  // centre ring + hold progress
+  const r = 34 * devicePixelRatio;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.lineWidth = 4*devicePixelRatio; ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.stroke();
+  const aligned = ang < 3 && speed < 6;
+  if (aligned && !busy) hold = Math.min(1, hold + 1/22); else hold = Math.max(0, hold - 0.08);
+  if (hold > 0) { ctx.beginPath(); ctx.arc(cx, cy, r, -Math.PI/2, -Math.PI/2 + hold * 2 * Math.PI); ctx.strokeStyle = '#c9a227'; ctx.lineWidth = 8*devicePixelRatio; ctx.stroke(); }
+  if (hold >= 1 && best >= 0) capture(best);
+
+  // arrow toward the next target when it is off screen
+  if (best >= 0) {
+    const w = tDir(targets[best]);
+    const v = [ dot([R[0][0],R[1][0],R[2][0]], w), dot([R[0][1],R[1][1],R[2][1]], w), dot([R[0][2],R[1][2],R[2][2]], w) ];
+    const fwd = -v[2];
+    let sx = v[0], sy = -v[1];
+    const onScreen = fwd > 0.15 && Math.abs(f*v[0]/fwd) < W/2 && Math.abs(f*v[1]/fwd) < H/2;
+    if (!onScreen) {
+      const a = Math.atan2(sy, sx), rr = Math.min(W, H) * 0.36;
+      const ax = cx + Math.cos(a) * rr, ay = cy + Math.sin(a) * rr;
+      ctx.save(); ctx.translate(ax, ay); ctx.rotate(a);
+      ctx.beginPath(); const s = 22*devicePixelRatio;
+      ctx.moveTo(s, 0); ctx.lineTo(-s*.7, s*.7); ctx.lineTo(-s*.7, -s*.7); ctx.closePath();
+      ctx.fillStyle = '#c9a227'; ctx.fill(); ctx.restore();
+    }
+    const tp = targets[best].pitch;
+    $('#tip').textContent = speed > 25 ? 'آرام‌تر بچرخانید'
+      : tp >= 70 ? 'گوشی را رو به سقف بگیرید'
+      : tp <= -70 ? 'گوشی را رو به کف بگیرید'
+      : tp > 0 ? 'ردیف بالا: گوشی را کمی رو به بالا بگیرید'
+      : tp < 0 ? 'ردیف پایین: گوشی را کمی رو به پایین بگیرید'
+      : 'ردیف وسط: گوشی را صاف رو به جلو بگیرید';
+  }
+  $('#dir').textContent = `${fa(Math.round(pose.pitch))}°`;
+}
+requestAnimationFrame(loop);
+
+/* ---------- stitching on the phone ---------- */
+async function loadPix(blob, long){
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = url; });
+    const sc = Math.min(1, long / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.round(img.naturalWidth * sc), h = Math.round(img.naturalHeight * sc);
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const g = c.getContext('2d'); g.drawImage(img, 0, 0, w, h);
+    return { w, h, d: g.getImageData(0, 0, w, h).data };
+  } finally { URL.revokeObjectURL(url); }
+}
+const tick = () => new Promise(r => setTimeout(r, 0));
+
+async function stitch(OW, OH, long, L, cache, progress){
+  const acc = new Float32Array(OW * OH * 4), cov = new Float32Array(OW * OH);
+  const sinY = new Float32Array(OW), cosY = new Float32Array(OW), sinE = new Float32Array(OH), cosE = new Float32Array(OH);
+  for (let i = 0; i < OW; i++) { const y = ((i + .5) / OW * 360 - 180) * D; sinY[i] = Math.sin(y); cosY[i] = Math.cos(y); }
+  for (let j = 0; j < OH; j++) { const e = (90 - (j + .5) / OH * 180) * D; sinE[j] = Math.sin(e); cosE[j] = Math.cos(e); }
+  for (let k = 0; k < shots.length; k++) {
+    const sh = shots[k];
+    const P = cache ? (cache[k] = cache[k] || await loadPix(sh.blob, long)) : await loadPix(sh.blob, long);
+    const { w, h, d } = P, hw = w / 2, hh = h / 2;
+    const fp = (Math.max(w, h) / 2) / Math.tan(L * D / 2);
+    const [f0, f1, f2] = sh.f, [r0, r1, r2] = sh.r, [u0, u1, u2] = sh.u;
+    // footprint of this photo on the sphere
+    const cyaw = Math.atan2(f0, f1) / D;
+    let dmin = 999, dmax = -999, emin = 90, emax = -90;
+    for (let t = 0; t <= 1.0001; t += 0.05) {
+      for (const [x, y] of [[t*w, 0], [t*w, h], [0, t*h], [w, t*h]]) {
+        const v = norm([f0*fp + r0*(x-hw) + u0*(hh-y), f1*fp + r1*(x-hw) + u1*(hh-y), f2*fp + r2*(x-hw) + u2*(hh-y)]);
+        const yy = Math.atan2(v[0], v[1]) / D, ee = Math.asin(v[2]) / D;
+        const dd = ((yy - cyaw + 540) % 360) - 180;
+        dmin = Math.min(dmin, dd); dmax = Math.max(dmax, dd); emin = Math.min(emin, ee); emax = Math.max(emax, ee);
+      }
+    }
+    let full = false;
+    for (const sgn of [1, -1]) {            // does the photo contain the zenith / nadir?
+      const cz = sgn * f2; if (cz <= 0) continue;
+      const px = hw + fp * (sgn * r2) / cz, py = hh - fp * (sgn * u2) / cz;
+      if (px >= 0 && px < w && py >= 0 && py < h) { full = true; if (sgn > 0) emax = 90; else emin = -90; }
+    }
+    const j0 = Math.max(0, Math.floor((90 - emax) / 180 * OH) - 2), j1 = Math.min(OH - 1, Math.ceil((90 - emin) / 180 * OH) + 2);
+    let i0 = 0, i1 = OW - 1;
+    if (!full && dmax - dmin < 300) { i0 = Math.floor((cyaw + dmin + 180) / 360 * OW) - 2; i1 = Math.ceil((cyaw + dmax + 180) / 360 * OW) + 2; }
+    for (let j = j0; j <= j1; j++) {
+      const se = sinE[j], ce = cosE[j], row = j * OW;
+      for (let ii = i0; ii <= i1; ii++) {
+        const i = ((ii % OW) + OW) % OW;
+        const wx = ce * sinY[i], wy = ce * cosY[i], wz = se;
+        const cz = wx*f0 + wy*f1 + wz*f2; if (cz <= 0.05) continue;
+        const px = hw + fp * (wx*r0 + wy*r1 + wz*r2) / cz, py = hh - fp * (wx*u0 + wy*u1 + wz*u2) / cz;
+        if (px < 0 || py < 0 || px >= w - 1 || py >= h - 1) continue;
+        const lin = Math.min(Math.min(px, w - 1 - px) / hw, Math.min(py, h - 1 - py) / hh);
+        let wt = (1 - Math.abs(px - hw) / hw) * (1 - Math.abs(py - hh) / hh); wt = wt * wt * wt;
+        if (lin > cov[row + i]) cov[row + i] = lin;
+        const x0 = px | 0, y0 = py | 0, ax = px - x0, ay = py - y0;
+        const o00 = (y0 * w + x0) * 4, o10 = o00 + 4, o01 = o00 + w * 4, o11 = o01 + 4;
+        const b00 = (1-ax)*(1-ay), b10 = ax*(1-ay), b01 = (1-ax)*ay, b11 = ax*ay;
+        const o = (row + i) * 4;
+        acc[o]   += wt * (d[o00]*b00 + d[o10]*b10 + d[o01]*b01 + d[o11]*b11);
+        acc[o+1] += wt * (d[o00+1]*b00 + d[o10+1]*b10 + d[o01+1]*b01 + d[o11+1]*b11);
+        acc[o+2] += wt * (d[o00+2]*b00 + d[o10+2]*b10 + d[o01+2]*b01 + d[o11+2]*b11);
+        acc[o+3] += wt;
+      }
+    }
+    if (progress) progress(k + 1, shots.length);
+    await tick();
+  }
+  return fillAndPack(acc, cov, OW, OH);
+}
+
+/* fill gaps nobody photographed with a smooth guess from the surroundings */
+function fillAndPack(acc, cov, OW, OH){
+  const SW = 256, SH = 128;
+  let C = new Float32Array(SW * SH * 3), Wt = new Float32Array(SW * SH);
+  for (let j = 0; j < OH; j++) for (let i = 0; i < OW; i++) {
+    const o = (j * OW + i) * 4, wv = acc[o+3]; if (wv <= 0) continue;
+    const s = ((j * SH / OH | 0) * SW + (i * SW / OW | 0));
+    C[s*3] += acc[o] / wv; C[s*3+1] += acc[o+1] / wv; C[s*3+2] += acc[o+2] / wv; Wt[s] += 1;
+  }
+  for (let s = 0; s < SW * SH; s++) if (Wt[s] > 0) { C[s*3] /= Wt[s]; C[s*3+1] /= Wt[s]; C[s*3+2] /= Wt[s]; Wt[s] = 1; }
+  // push-pull
+  const levels = [{ C, Wt, w: SW, h: SH }];
+  while (levels[levels.length - 1].w > 4) {
+    const L0 = levels[levels.length - 1], w = L0.w >> 1, h = Math.max(1, L0.h >> 1);
+    const C2 = new Float32Array(w * h * 3), W2 = new Float32Array(w * h);
+    for (let y = 0; y < L0.h; y++) for (let x = 0; x < L0.w; x++) {
+      const s = y * L0.w + x, t = Math.min(h - 1, y >> 1) * w + Math.min(w - 1, x >> 1), q = L0.Wt[s];
+      C2[t*3] += L0.C[s*3] * q; C2[t*3+1] += L0.C[s*3+1] * q; C2[t*3+2] += L0.C[s*3+2] * q; W2[t] += q;
+    }
+    for (let t = 0; t < w * h; t++) { if (W2[t] > 0) { C2[t*3] /= W2[t]; C2[t*3+1] /= W2[t]; C2[t*3+2] /= W2[t]; } W2[t] = Math.min(1, W2[t]); }
+    levels.push({ C: C2, Wt: W2, w, h });
+  }
+  for (let l = levels.length - 2; l >= 0; l--) {
+    const A = levels[l], B = levels[l + 1];
+    for (let y = 0; y < A.h; y++) for (let x = 0; x < A.w; x++) {
+      const s = y * A.w + x, q = A.Wt[s]; if (q >= 1) continue;
+      const bx = Math.min(B.w - 1, x >> 1), by = Math.min(B.h - 1, y >> 1), t = by * B.w + bx;
+      for (let c = 0; c < 3; c++) A.C[s*3+c] = A.C[s*3+c] * q + B.C[t*3+c] * (1 - q);
+      A.Wt[s] = 1;
+    }
+  }
+  // gentle blur of the guess
+  const G = new Float32Array(SW * SH * 3);
+  for (let y = 0; y < SH; y++) for (let x = 0; x < SW; x++) {
+    let r = 0, g = 0, b = 0, n = 0;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      const yy = Math.min(SH - 1, Math.max(0, y + dy)), xx = (x + dx + SW) % SW, s = yy * SW + xx;
+      r += C[s*3]; g += C[s*3+1]; b += C[s*3+2]; n++;
+    }
+    const s = y * SW + x; G[s*3] = r / n; G[s*3+1] = g / n; G[s*3+2] = b / n;
+  }
+  // typical weight to soften borders of coverage
+  const img = new ImageData(OW, OH), out = img.data;
+  for (let j = 0; j < OH; j++) {
+    const fy = Math.min(SH - 1.001, Math.max(0, (j + .5) * SH / OH - .5)), y0 = fy | 0, ay = fy - y0;
+    for (let i = 0; i < OW; i++) {
+      const o = (j * OW + i) * 4, wv = acc[o+3];
+      const a = Math.min(1, cov[j * OW + i] / 0.04);
+      let r = 0, g = 0, b = 0;
+      if (a < 1) {
+        const fx = (i + .5) * SW / OW - .5, x0 = Math.floor(fx), ax = fx - x0, xa = (x0 + SW) % SW, xb = (x0 + 1) % SW;
+        const s00 = y0 * SW + xa, s10 = y0 * SW + xb, s01 = (y0 + 1) * SW + xa, s11 = (y0 + 1) * SW + xb;
+        const k00 = (1-ax)*(1-ay), k10 = ax*(1-ay), k01 = (1-ax)*ay, k11 = ax*ay;
+        r = G[s00*3]*k00 + G[s10*3]*k10 + G[s01*3]*k01 + G[s11*3]*k11;
+        g = G[s00*3+1]*k00 + G[s10*3+1]*k10 + G[s01*3+1]*k01 + G[s11*3+1]*k11;
+        b = G[s00*3+2]*k00 + G[s10*3+2]*k10 + G[s01*3+2]*k01 + G[s11*3+2]*k11;
+      }
+      if (wv > 0) { r = r * (1 - a) + acc[o] / wv * a; g = g * (1 - a) + acc[o+1] / wv * a; b = b * (1 - a) + acc[o+2] / wv * a; }
+      out[o] = r; out[o+1] = g; out[o+2] = b; out[o+3] = 255;
+    }
+  }
+  return img;
+}
+
+let pvCache = [], pvTimer = null, pvRun = 0;
+async function preview(){
+  const run = ++pvRun, L = +$('#fov').value;
+  $('#fovVal').textContent = fa(L) + '°';
+  $('#stTxt').textContent = 'در حال ساختن پیش‌نمایش…';
+  const img = await stitch(1024, 512, 360, L, pvCache, (a, b) => { if (run === pvRun) $('#stTxt').textContent = `پیش‌نمایش: ${fa(a)} از ${fa(b)}`; });
+  if (run !== pvRun) return;
+  const c = $('#pv'); c.width = 1024; c.height = 512; c.getContext('2d').putImageData(img, 0, 0);
+  $('#stTxt').textContent = 'پیش‌نمایش آماده است. اگر یکدست است، «ساختن با کیفیت کامل» را بزنید.';
+}
+$('#fov').oninput = () => { $('#fovVal').textContent = fa(+$('#fov').value) + '°'; clearTimeout(pvTimer); pvTimer = setTimeout(preview, 300); };
+$('#stitchBtn').onclick = () => {
+  if (!shots.length) { alert('هنوز عکسی گرفته نشده.'); return; }
+  show('stitch'); $('#resShare').hidden = true; $('#resLink').hidden = true; preview();
+};
+$('#stBack').onclick = () => show('done');
+let resultFile = null;
+$('#finalBtn').onclick = async () => {
+  const btn = $('#finalBtn'); btn.disabled = true;
+  try {
+    const L = +$('#fov').value;
+    const img = await stitch(3072, 1536, 1280, L, null, (a, b) => $('#stTxt').textContent = `ساختن عکس نهایی: ${fa(a)} از ${fa(b)}…`);
+    const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; c.getContext('2d').putImageData(img, 0, 0);
+    const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.9));
+    const name = 'pano360_' + new Date().toISOString().slice(0,16).replace(/[-:T]/g, '') + '.jpg';
+    resultFile = new File([blob], name, { type: 'image/jpeg' });
+    const pv = $('#pv'); pv.getContext('2d').drawImage(c, 0, 0, pv.width, pv.height);
+    const a = $('#resLink'); a.href = URL.createObjectURL(blob); a.download = name; a.hidden = false;
+    $('#resShare').hidden = !(navigator.canShare && navigator.canShare({ files: [resultFile] }));
+    $('#stTxt').textContent = 'عکس ۳۶۰ آماده است. آن را ذخیره کنید یا بفرستید و در برنامهٔ تور اضافه کنید.';
+  } catch(e) {
+    $('#stTxt').textContent = 'ساختن نشد: ' + (e.message || e) + ' — اگر حافظهٔ گوشی پر است، برنامه‌های دیگر را ببندید و دوباره امتحان کنید.';
+  } finally { btn.disabled = false; }
+};
+$('#resShare').onclick = async () => {
+  try { await navigator.share({ files: [resultFile], title: 'عکس ۳۶۰' }); }
+  catch(e) { if (e.name !== 'AbortError') $('#resLink').click(); }
+};
+
+/* ---------- flow ---------- */
+function show(id){ document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id)); }
+if (!window.isSecureContext) $('#httpsWarn').hidden = false;
+
+$('#startBtn').onclick = async () => {
+  $('#err').textContent = '';
+  try {
+    if (typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission) {
+      const p = await DeviceOrientationEvent.requestPermission();
+      if (p !== 'granted') throw new Error('اجازهٔ سنسور حرکت داده نشد.');
+    }
+    await startCam();
+    if (!targets.length) makeTargets();
+    yaw0 = null; updateCount(); show('cam');
+  } catch(e) {
+    $('#err').textContent = 'شروع نشد: ' + (e.message || e) + ' — صفحه را از آدرس https باز کنید و اجازهٔ دوربین و حرکت را بدهید.';
+  }
+};
+$('#manualBtn').onclick = () => {
+  let best = -1, bd = -2; const p = camPose();
+  targets.forEach((tg, i) => { if (!tg.done) { const dd = dot(p.d, tDir(tg)); if (dd > bd) { bd = dd; best = i; } } });
+  capture(bd > Math.cos(12*D) ? best : null);
+};
+$('#finishBtn').onclick = finish;
+function finish(){
+  const left = targets.filter(t => !t.done).length;
+  $('#doneTxt').textContent = `${fa(shots.length)} عکس گرفته شد.` + (left ? ` ${fa(left)} نقطه باقی مانده؛ اگر بخواهید برگردید و کاملش کنید.` : ' همهٔ نقطه‌ها کامل شد.');
+  show('done');
+}
+$('#moreBtn').onclick = () => show('cam');
+$('#resetBtn').onclick = () => {
+  if (shots.length && !confirm('همهٔ عکس‌های این اتاق پاک شوند؟')) return;
+  shots = []; makeTargets(); yaw0 = null; updateCount(); show('cam');
+};
+
+function files(){
+  const stamp = new Date().toISOString().slice(0,16).replace(/[-:T]/g, '');
+  const list = shots.map((s, i) => new File([s.blob], `pano_${stamp}_${String(i+1).padStart(2,'0')}.jpg`, { type: 'image/jpeg' }));
+  const meta = {
+    app: 'capture360', version: 1, created: new Date().toISOString(),
+    width: vid.videoWidth, height: vid.videoHeight, hfov_guess: HFOV_GUESS,
+    note: 'yaw/pitch/roll in degrees; yaw relative to first heading, clockwise; pitch up positive',
+    shots: shots.map((s, i) => ({ file: list[i].name, yaw: +s.yaw.toFixed(2), pitch: +s.pitch.toFixed(2), roll: +s.roll.toFixed(2), f: s.f, u: s.u, r: s.r }))
+  };
+  list.push(new File([JSON.stringify(meta, null, 2)], `pano_${stamp}_poses.json`, { type: 'application/json' }));
+  return list;
+}
+$('#shareBtn').onclick = async () => {
+  const list = files();
+  try {
+    if (navigator.canShare && navigator.canShare({ files: list })) await navigator.share({ files: list, title: 'عکس‌های ۳۶۰' });
+    else $('#zipBtn').click();
+  } catch(e) { if (e.name !== 'AbortError') alert('ارسال نشد؛ دکمهٔ ZIP را امتحان کنید.'); }
+};
+$('#zipBtn').onclick = async () => {
+  if (typeof JSZip === 'undefined') { alert('برای ساختن ZIP اینترنت لازم است.'); return; }
+  const z = new JSZip(); files().forEach(f => z.file(f.name, f));
+  const blob = await z.generateAsync({ type: 'blob' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'pano360.zip'; a.click();
+};
+</script>
+</body>
+</html>
