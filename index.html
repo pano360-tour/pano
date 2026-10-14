@@ -34,7 +34,8 @@ canvas#ov{position:absolute;inset:0;width:100%;height:100%}
 .fovRow input{width:100%;margin-top:10px;accent-color:#c9a227}
 .hint{font-size:.88rem;color:var(--muted)}
 #stList{display:flex;flex-direction:column;gap:12px;max-width:380px;margin-top:8px}
-#stList a{text-decoration:none}
+#resImg{display:block;width:100%;border-radius:12px;-webkit-touch-callout:default;user-select:auto;-webkit-user-select:auto}
+.save{background:rgba(201,162,39,.15);border:1px solid #c9a227;border-radius:12px;padding:10px 12px}
 #errBox{position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:99;background:#b5543c;color:#fff;
   padding:12px 14px;border-radius:12px;font-size:.85rem;line-height:1.7;direction:ltr;text-align:left;white-space:pre-wrap;max-height:40vh;overflow:auto}
 #doneList{margin:18px 0;display:flex;flex-direction:column;gap:12px;align-items:stretch;max-width:380px}
@@ -88,6 +89,11 @@ canvas#ov{position:absolute;inset:0;width:100%;height:100%}
 <section id="stitch" class="screen">
   <h1>ساختن ۳۶۰</h1>
   <canvas id="pv"></canvas>
+  <div id="resBox" hidden>
+    <p class="save">عکس ۳۶۰ آماده است. برای ذخیره، <b>انگشتتان را روی عکس زیر نگه دارید</b> و <b>Save to Photos</b> (یا Share) را بزنید.</p>
+    <img id="resImg" alt="عکس ۳۶۰">
+    <p class="hint">برای فرستادن به لپ‌تاپ از تلگرام، عکس را به‌صورت <b>File</b> بفرستید تا فشرده نشود.</p>
+  </div>
   <p id="stTxt">در حال ساختن پیش‌نمایش…</p>
   <label class="fovRow">زاویهٔ دید دوربین: <b id="fovVal"></b>
     <input id="fov" type="range" min="40" max="80" step="0.5" value="58">
@@ -95,8 +101,7 @@ canvas#ov{position:absolute;inset:0;width:100%;height:100%}
   <p class="hint">اگر لبهٔ اشیا دوتا دیده می‌شود یا تکه‌ها روی هم نمی‌نشینند، این نوار را کمی جابه‌جا کنید تا تصویر یکدست شود.</p>
   <div id="stList">
     <button id="finalBtn" class="btn">ساختن با کیفیت کامل</button>
-    <button id="resShare" class="btn" hidden>ذخیره یا ارسال عکس ۳۶۰</button>
-    <a id="resLink" class="btn ghost" hidden download>دانلود عکس ۳۶۰</a>
+    <button id="resShare" class="btn ghost" hidden>ارسال به‌صورت فایل (Files، تلگرام…)</button>
     <button id="stBack" class="btn ghost">برگشت</button>
   </div>
 </section>
@@ -111,7 +116,7 @@ window.addEventListener('error', e => showErr((e.message || e.error) + ' @' + (e
 window.addEventListener('unhandledrejection', e => showErr(e.reason && (e.reason.message || e.reason)));
 
 /* ---------- targets: rows of points around you ---------- */
-const ROWS = [ {p:0,n:14}, {p:42,n:10}, {p:-42,n:10}, {p:76,n:4}, {p:-76,n:4}, {p:90,n:1}, {p:-90,n:1} ];
+const ROWS = [ {p:0,n:11}, {p:40,n:9}, {p:-40,n:9}, {p:75,n:3}, {p:-75,n:3} ];
 let targets = [];
 function makeTargets(){
   targets = [];
@@ -262,8 +267,8 @@ function loop(t){
     }
     const tp = targets[best].pitch;
     $('#tip').textContent = speed > 25 ? 'آرام‌تر بچرخانید'
-      : tp >= 70 ? 'گوشی را رو به سقف بگیرید'
-      : tp <= -70 ? 'گوشی را رو به کف بگیرید'
+      : tp >= 70 ? 'گوشی را تقریباً رو به سقف بگیرید'
+      : tp <= -70 ? 'گوشی را تقریباً رو به کف بگیرید'
       : tp > 0 ? 'ردیف بالا: گوشی را کمی رو به بالا بگیرید'
       : tp < 0 ? 'ردیف پایین: گوشی را کمی رو به پایین بگیرید'
       : 'ردیف وسط: گوشی را صاف رو به جلو بگیرید';
@@ -429,7 +434,7 @@ async function preview(){
 $('#fov').oninput = () => { $('#fovVal').textContent = fa(+$('#fov').value) + '°'; clearTimeout(pvTimer); pvTimer = setTimeout(preview, 300); };
 $('#stitchBtn').onclick = () => {
   if (!shots.length) { alert('هنوز عکسی گرفته نشده.'); return; }
-  show('stitch'); $('#resShare').hidden = true; $('#resLink').hidden = true; preview();
+  show('stitch'); $('#resShare').hidden = true; $('#resBox').hidden = true; preview();
 };
 $('#stBack').onclick = () => show('done');
 let resultFile = null;
@@ -445,17 +450,19 @@ $('#finalBtn').onclick = async () => {
     resultFile = new File([blob], name, { type: 'image/jpeg' });
     const pv = $('#pv'); pv.getContext('2d').drawImage(c, 0, 0, pv.width, pv.height);
     c.width = c.height = 0;
-    const a = $('#resLink'); a.href = URL.createObjectURL(blob); a.download = name; a.hidden = false;
+    const im = $('#resImg'); if (im.src) URL.revokeObjectURL(im.src); im.src = URL.createObjectURL(blob);
+    $('#resBox').hidden = false;
     $('#resShare').hidden = !(navigator.canShare && navigator.canShare({ files: [resultFile] }));
-    $('#stTxt').textContent = 'عکس ۳۶۰ آماده است. آن را ذخیره کنید یا بفرستید و در برنامهٔ تور اضافه کنید.';
+    $('#stTxt').textContent = 'تمام شد.';
+    setTimeout(() => $('#resBox').scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
   } catch(e) {
     showErr(e.message || e);
     $('#stTxt').textContent = 'ساختن نشد: ' + (e.message || e) + ' — اگر حافظهٔ گوشی پر است، برنامه‌های دیگر را ببندید و دوباره امتحان کنید.';
   } finally { btn.disabled = false; }
 };
 $('#resShare').onclick = async () => {
-  try { await navigator.share({ files: [resultFile], title: 'عکس ۳۶۰' }); }
-  catch(e) { if (e.name !== 'AbortError') $('#resLink').click(); }
+  try { await navigator.share({ files: [resultFile] }); }
+  catch(e) { if (e.name !== 'AbortError') showErr('ارسال نشد (' + e.name + '). انگشتتان را روی عکس نگه دارید و از آنجا ذخیره کنید.'); }
 };
 
 /* ---------- flow ---------- */
@@ -511,9 +518,9 @@ function files(){
 $('#shareBtn').onclick = async () => {
   const list = files();
   try {
-    if (navigator.canShare && navigator.canShare({ files: list })) await navigator.share({ files: list, title: 'عکس‌های ۳۶۰' });
+    if (navigator.canShare && navigator.canShare({ files: list })) await navigator.share({ files: list });
     else $('#zipBtn').click();
-  } catch(e) { if (e.name !== 'AbortError') alert('ارسال نشد؛ دکمهٔ ZIP را امتحان کنید.'); }
+  } catch(e) { if (e.name !== 'AbortError') showErr('ارسال نشد (' + e.name + ')؛ دکمهٔ ZIP را امتحان کنید.'); }
 };
 $('#zipBtn').onclick = async () => {
   if (typeof JSZip === 'undefined') { alert('برای ساختن ZIP اینترنت لازم است.'); return; }
