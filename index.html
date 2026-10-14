@@ -157,7 +157,7 @@ const vid = $('#vid'), ov = $('#ov'), ctx = ov.getContext('2d');
 async function startCam(){
   stream = await navigator.mediaDevices.getUserMedia({
     audio: false,
-    video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } }
+    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
   });
   vid.srcObject = stream; await vid.play();
 }
@@ -167,23 +167,27 @@ let shots = [];      // {blob, yaw, pitch, roll, target}
 let hold = 0, lastD = null, lastT = 0, busy = false;
 const HFOV_GUESS = 40;   // only used to draw the dots on screen
 
+const capC = document.createElement('canvas');
 async function capture(targetIndex){
   if (busy || !vid.videoWidth) return;
   busy = true;
-  const pose = camPose();
-  const c = document.createElement('canvas');
-  c.width = vid.videoWidth; c.height = vid.videoHeight;
-  c.getContext('2d').drawImage(vid, 0, 0);
-  const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
-  const rz = v => { const c = Math.cos(yaw0*D), sn = Math.sin(yaw0*D); return [v[0]*c - v[1]*sn, v[0]*sn + v[1]*c, v[2]]; };
-  const basis = { f: rz(camDir()), u: rz(camUp()), r: rz([R[0][0], R[1][0], R[2][0]]) };
-  shots.push({ blob, yaw: ((pose.yaw - yaw0) % 360 + 360) % 360, pitch: pose.pitch, roll: pose.roll, target: targetIndex, ...basis });
-  if (targetIndex != null) targets[targetIndex].done = true;
-  $('#flash').style.opacity = .7; setTimeout(() => $('#flash').style.opacity = 0, 120);
-  if (navigator.vibrate) navigator.vibrate(40);
-  hold = 0; busy = false;
-  updateCount();
-  if (targets.every(t => t.done)) finish();
+  try {
+    const pose = camPose();
+    if (capC.width !== vid.videoWidth || capC.height !== vid.videoHeight) { capC.width = vid.videoWidth; capC.height = vid.videoHeight; }
+    capC.getContext('2d').drawImage(vid, 0, 0, capC.width, capC.height);
+    const blob = await new Promise(r => capC.toBlob(r, 'image/jpeg', 0.9));
+    if (!blob) throw new Error('عکس ذخیره نشد');
+    const rz = v => { const c = Math.cos(yaw0*D), sn = Math.sin(yaw0*D); return [v[0]*c - v[1]*sn, v[0]*sn + v[1]*c, v[2]]; };
+    const basis = { f: rz(camDir()), u: rz(camUp()), r: rz([R[0][0], R[1][0], R[2][0]]) };
+    shots.push({ blob, yaw: ((pose.yaw - yaw0) % 360 + 360) % 360, pitch: pose.pitch, roll: pose.roll, target: targetIndex, ...basis });
+    if (targetIndex != null) targets[targetIndex].done = true;
+    $('#flash').style.opacity = .7; setTimeout(() => $('#flash').style.opacity = 0, 120);
+    if (navigator.vibrate) navigator.vibrate(40);
+    updateCount();
+    if (targets.every(t => t.done)) finish();
+  } catch(e) {
+    $('#tip').textContent = 'عکس گرفته نشد، دوباره روی نقطه نگه دارید (' + (e.message || e) + ')';
+  } finally { hold = 0; busy = false; }
 }
 function updateCount(){
   const n = targets.filter(t => t.done).length;
@@ -194,7 +198,8 @@ function updateCount(){
 function loop(t){
   requestAnimationFrame(loop);
   if (!$('#cam').classList.contains('on')) return;
-  const W = ov.width = ov.clientWidth * devicePixelRatio, H = ov.height = ov.clientHeight * devicePixelRatio;
+  const W = Math.round(ov.clientWidth * devicePixelRatio), H = Math.round(ov.clientHeight * devicePixelRatio);
+  if (ov.width !== W || ov.height !== H) { ov.width = W; ov.height = H; }
   ctx.clearRect(0, 0, W, H);
   if (!R) { $('#tip').textContent = 'سنسور حرکت در دسترس نیست…'; return; }
   const pose = camPose();
@@ -262,15 +267,17 @@ function loop(t){
 requestAnimationFrame(loop);
 
 /* ---------- stitching on the phone ---------- */
+const pixC = document.createElement('canvas');
 async function loadPix(blob, long){
   const url = URL.createObjectURL(blob);
   try {
     const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = url; });
     const sc = Math.min(1, long / Math.max(img.naturalWidth, img.naturalHeight));
     const w = Math.round(img.naturalWidth * sc), h = Math.round(img.naturalHeight * sc);
-    const c = document.createElement('canvas'); c.width = w; c.height = h;
-    const g = c.getContext('2d'); g.drawImage(img, 0, 0, w, h);
-    return { w, h, d: g.getImageData(0, 0, w, h).data };
+    pixC.width = w; pixC.height = h;
+    const g = pixC.getContext('2d'); g.drawImage(img, 0, 0, w, h);
+    const d = g.getImageData(0, 0, w, h).data;
+    return { w, h, d };
   } finally { URL.revokeObjectURL(url); }
 }
 const tick = () => new Promise(r => setTimeout(r, 0));
@@ -421,9 +428,11 @@ $('#finalBtn').onclick = async () => {
     const img = await stitch(3072, 1536, 1280, L, null, (a, b) => $('#stTxt').textContent = `ساختن عکس نهایی: ${fa(a)} از ${fa(b)}…`);
     const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; c.getContext('2d').putImageData(img, 0, 0);
     const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.9));
+    if (!blob) throw new Error('حافظه کافی نبود');
     const name = 'pano360_' + new Date().toISOString().slice(0,16).replace(/[-:T]/g, '') + '.jpg';
     resultFile = new File([blob], name, { type: 'image/jpeg' });
     const pv = $('#pv'); pv.getContext('2d').drawImage(c, 0, 0, pv.width, pv.height);
+    c.width = c.height = 0;
     const a = $('#resLink'); a.href = URL.createObjectURL(blob); a.download = name; a.hidden = false;
     $('#resShare').hidden = !(navigator.canShare && navigator.canShare({ files: [resultFile] }));
     $('#stTxt').textContent = 'عکس ۳۶۰ آماده است. آن را ذخیره کنید یا بفرستید و در برنامهٔ تور اضافه کنید.';
